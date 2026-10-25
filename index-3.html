@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskMate — Pencatat Tugas</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style type="text/tailwindcss">
+  .btn{@apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-p{@apply bg-emerald-600 text-white hover:bg-emerald-700}
+  .btn-g{@apply bg-white text-slate-700 border border-slate-200 hover:bg-slate-50}
+  .btn-d{@apply bg-red-600 text-white hover:bg-red-700}
+  .inp{@apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500}
+  .card{@apply rounded-2xl bg-white p-4 shadow-sm border border-slate-100}
+  .chip{@apply rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-50}
+  .chip-on{@apply bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-600}
+  .lbl{@apply mb-1 block text-xs font-medium text-slate-600}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+
+<div class="mx-auto max-w-3xl px-4 pb-16 pt-6">
+  <!-- Header -->
+  <header class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-emerald-700">TaskMate</h1>
+      <p id="tgl" class="text-sm text-slate-500"></p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button id="b-sch" class="btn btn-g">Jadwal</button>
+      <button id="b-wa" class="btn btn-g">Ringkasan WhatsApp</button>
+      <button id="b-add" class="btn btn-p">+ Tambah tugas</button>
+    </div>
+  </header>
+
+  <div id="notice" class="mt-4 hidden rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"></div>
+
+  <!-- Statistik -->
+  <section class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="card"><p class="text-xs text-slate-500">Belum selesai</p><p id="s-pend" class="text-2xl font-bold">0</p></div>
+    <div class="card"><p class="text-xs text-slate-500">Deadline hari ini</p><p id="s-today" class="text-2xl font-bold text-amber-600">0</p></div>
+    <div class="card"><p class="text-xs text-slate-500">Deadline besok</p><p id="s-tom" class="text-2xl font-bold text-emerald-700">0</p></div>
+    <div class="card"><p class="text-xs text-slate-500">Selesai</p><p id="s-done" class="text-2xl font-bold text-slate-600">0</p></div>
+  </section>
+
+  <section id="sch-card" class="card mt-3 hidden"></section>
+
+  <!-- Filter -->
+  <section class="mt-6 space-y-3">
+    <input id="q" type="search" class="inp" placeholder="Cari judul, catatan, atau mata pelajaran…" aria-label="Cari tugas">
+    <div class="flex flex-wrap items-center gap-1.5"><span class="mr-1 text-xs text-slate-500">Kategori</span><span id="ch-cat" class="flex flex-wrap gap-1.5"></span></div>
+    <div class="flex flex-wrap items-center gap-1.5"><span class="mr-1 text-xs text-slate-500">Status</span><span id="ch-st" class="flex flex-wrap gap-1.5"></span></div>
+    <div class="flex items-center gap-2">
+      <label for="sort" class="text-xs text-slate-500">Urutkan</label>
+      <select id="sort" class="inp !w-auto">
+        <option value="deadline">Deadline terdekat</option>
+        <option value="priority">Prioritas tertinggi</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Daftar -->
+  <main id="list" class="mt-4 space-y-3" aria-live="polite"></main>
+
+  <footer class="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500">
+    <span class="mr-auto">Data tersimpan di browser ini. Buat cadangan secara berkala.</span>
+    <button id="b-exp" class="btn btn-g !py-1.5">Ekspor JSON</button>
+    <button id="b-imp" class="btn btn-g !py-1.5">Impor JSON</button>
+    <input id="file" type="file" accept="application/json,.json" class="hidden">
+  </footer>
+</div>
+
+<!-- Modal tambah/edit -->
+<div id="m-form" class="modal hidden fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+  <form id="form" novalidate class="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:max-w-lg sm:rounded-2xl">
+    <h2 id="f-head" class="mb-4 text-lg font-semibold"></h2>
+    <div class="space-y-3">
+      <div><label class="lbl" for="f-title">Judul tugas *</label><input id="f-title" class="inp" maxlength="120" placeholder="Contoh: Menyelesaikan CRUD Laravel"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl" for="f-cat">Kategori</label><select id="f-cat" class="inp"><option value="school">Sekolah</option><option value="personal">Pribadi</option></select></div>
+        <div><label class="lbl" for="f-pri">Prioritas</label><select id="f-pri" class="inp"><option value="rendah">Rendah</option><option value="sedang" selected>Sedang</option><option value="tinggi">Tinggi</option></select></div>
+      </div>
+      <div><label class="lbl" for="f-subsel">Mata pelajaran (opsional)</label><select id="f-subsel" class="inp"></select><input id="f-sub" class="inp mt-2 hidden" maxlength="60" placeholder="Ketik nama mata pelajaran"></div>
+      <div><label class="lbl" for="f-date">Deadline *</label><input id="f-date" type="date" class="inp"><div id="f-hint" class="mt-1.5"></div></div>
+      <div><label class="lbl" for="f-desc">Catatan (opsional)</label><textarea id="f-desc" rows="3" maxlength="1000" class="inp"></textarea></div>
+      <p id="f-err" class="text-sm text-red-600" role="alert"></p>
+    </div>
+    <div class="mt-4 flex justify-end gap-2">
+      <button type="button" class="btn btn-g" data-close="m-form">Batal</button>
+      <button type="submit" class="btn btn-p">Simpan</button>
+    </div>
+  </form>
+</div>
+
+<!-- Modal konfirmasi -->
+<div id="m-dlg" class="modal hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div class="w-full max-w-sm rounded-2xl bg-white p-5">
+    <h2 id="d-title" class="text-lg font-semibold"></h2>
+    <p id="d-msg" class="mt-2 break-words text-sm text-slate-600"></p>
+    <div id="d-acts" class="mt-4 flex flex-wrap justify-end gap-2"></div>
+  </div>
+</div>
+
+<!-- Modal jadwal -->
+<div id="m-sch" class="modal hidden fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+  <div class="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:max-w-lg sm:rounded-2xl">
+    <h2 class="text-lg font-semibold">Jadwal pelajaran</h2>
+    <p class="mt-1 text-xs text-slate-500">Isi sendiri pelajaran tiap hari. Ketik nama pelajaran, lalu tekan Enter atau Tambah.</p>
+    <div id="sch-days" class="mt-2"></div>
+    <div class="mt-4 flex justify-end"><button class="btn btn-g" data-close="m-sch">Tutup</button></div>
+  </div>
+</div>
+
+<!-- Modal WhatsApp -->
+<div id="m-wa" class="modal hidden fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+  <div class="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:max-w-lg sm:rounded-2xl">
+    <h2 class="text-lg font-semibold">Ringkasan tugas WhatsApp</h2>
+    <p class="mt-1 text-xs text-slate-500">Pilih tugas sekolah yang belum selesai untuk dimasukkan.</p>
+    <div id="wa-list" class="mt-3 max-h-48 overflow-y-auto rounded-xl border border-slate-100 px-3 py-1"></div>
+    <label class="mt-3 flex items-center gap-2 text-sm"><input id="wa-sch" type="checkbox" checked class="accent-emerald-600"> Sertakan jadwal pelajaran besok</label>
+    <p class="mb-1 mt-4 text-xs font-medium text-slate-600">Pratinjau</p>
+    <pre id="wa-prev" class="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm" style="font-family:inherit"></pre>
+    <p class="mt-2 text-xs text-slate-500">Pesan tidak terkirim otomatis. Setelah WhatsApp terbuka, pilih grup lalu tekan kirim sendiri.</p>
+    <div class="mt-4 flex flex-wrap justify-end gap-2">
+      <button class="btn btn-g" data-close="m-wa">Tutup</button>
+      <button id="wa-copy" class="btn btn-g">Salin Ringkasan</button>
+      <button id="wa-open" class="btn btn-p">Buka WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl px-4 py-2 text-sm text-white shadow-lg" role="status"></div>
+
+<script>
+'use strict';
+/* ===== Konstanta & state ===== */
+const KEY = 'taskmate.tasks.v1', BKP = 'taskmate.corrupt.backup';
+const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const DAYS = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const PRI = {
+  tinggi: { t: 'Tinggi', w: 0, c: 'bg-red-50 text-red-700' },
+  sedang: { t: 'Sedang', w: 1, c: 'bg-amber-50 text-amber-700' },
+  rendah: { t: 'Rendah', w: 2, c: 'bg-slate-100 text-slate-600' }
+};
+const CATS = [['all','Semua tugas'],['school','Sekolah'],['personal','Pribadi']];
+const STS = [['all','Semua'],['pending','Belum selesai'],['completed','Selesai'],['late','Terlambat']];
+let tasks = [], storageOk = true, corrupt = false, editId = null, lastToday = '';
+let waTasks = [], waSel = new Set(), waText = '', schedule = [];
+const f = { cat: 'all', st: 'pending', q: '', sort: 'deadline' };
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls = '', txt = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt) e.textContent = txt; return e; };
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+
+/* ===== Tanggal & deadline (kalender Asia/Jakarta) ===== */
+const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const parts = s => s.split('-').map(Number);
+const dayNum = s => { const [y, m, d] = parts(s); return Math.round(Date.UTC(y, m - 1, d) / 864e5); }; // hari kalender murni, bebas DST
+function validDate(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = parts(s), t = new Date(Date.UTC(y, m - 1, d));
+  return y >= 2000 && y <= 2100 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+function fmtLong(s) { const [y, m, d] = parts(s); return `${DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}, ${d} ${MONTHS[m - 1]} ${y}`; }
+function fmtShort(s) { const [y, m, d] = parts(s); return `${d} ${MONTHS[m - 1].slice(0, 3)} ${y}`; }
+const diffDays = (s, T) => dayNum(s) - dayNum(T);
+function label(t, T) {
+  if (t.status === 'completed') return 'Selesai';
+  const d = diffDays(t.deadline, T);
+  if (d < 0) return `Terlambat ${-d} hari`;
+  if (d === 0) return 'Hari ini';
+  if (d === 1) return 'Besok';
+  return `${d} hari lagi`;
+}
+
+/* ===== Penyimpanan ===== */
+function normalize(o) {
+  if (!o || typeof o !== 'object') return null;
+  const title = String(o.title ?? '').trim().slice(0, 120);
+  if (!title || !validDate(o.deadline)) return null;
+  return {
+    id: typeof o.id === 'string' && o.id ? o.id.slice(0, 64) : uid(),
+    title,
+    category: o.category === 'personal' ? 'personal' : 'school',
+    subject: String(o.subject ?? '').trim().slice(0, 60),
+    description: String(o.description ?? '').trim().slice(0, 1000),
+    deadline: o.deadline,
+    priority: PRI[o.priority] ? o.priority : 'sedang',
+    status: o.status === 'completed' ? 'completed' : 'pending',
+    createdAt: typeof o.createdAt === 'string' && !isNaN(Date.parse(o.createdAt)) ? o.createdAt : new Date().toISOString()
+  };
+}
+function load() {
+  try { localStorage.setItem('__tm', '1'); localStorage.removeItem('__tm'); } catch (e) { storageOk = false; return; }
+  const raw = localStorage.getItem(KEY);
+  if (!raw) return;
+  try {
+    const a = JSON.parse(raw);
+    if (!Array.isArray(a)) throw new Error('bukan array');
+    tasks = a.map(normalize).filter(Boolean);
+  } catch (e) {
+    try { localStorage.setItem(BKP, raw); } catch (_) {}
+    tasks = []; corrupt = true;
+  }
+}
+function save() {
+  if (!storageOk) return;
+  try { localStorage.setItem(KEY, JSON.stringify(tasks)); }
+  catch (e) { storageOk = false; toast('Gagal menyimpan ke penyimpanan lokal.', true); renderNotice(); }
+}
+function renderNotice() {
+  const n = $('notice'), msgs = [];
+  if (!storageOk) msgs.push('Penyimpanan lokal tidak tersedia. Data hanya bertahan selama halaman terbuka. Gunakan Ekspor JSON untuk cadangan.');
+  if (corrupt) msgs.push('Data tersimpan rusak dan tidak bisa dibaca. Salinan mentahnya disimpan di cadangan browser (taskmate.corrupt.backup).');
+  n.textContent = msgs.join(' ');
+  n.classList.toggle('hidden', !msgs.length);
+}
+
+/* ===== Umpan balik & modal ===== */
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'fixed bottom-4 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl px-4 py-2 text-sm text-white shadow-lg ' + (isErr ? 'bg-red-600' : 'bg-slate-800');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), 2800);
+}
+const open = id => $(id).classList.remove('hidden');
+const close = id => $(id).classList.add('hidden');
+function dialog(title, msg, actions) {
+  $('d-title').textContent = title;
+  $('d-msg').textContent = msg;
+  const box = $('d-acts'); box.replaceChildren();
+  const cancel = el('button', 'btn btn-g', 'Batal'); cancel.onclick = () => close('m-dlg');
+  box.append(cancel, ...actions.map(a => { const b = el('button', 'btn ' + a.cls, a.label); b.onclick = () => { close('m-dlg'); a.fn(); }; return b; }));
+  open('m-dlg');
+}
+
+/* ===== Render ===== */
+function cmp(a, b) {
+  const s = (a.status === 'completed') - (b.status === 'completed');
+  if (s) return s;
+  const d = a.deadline.localeCompare(b.deadline), p = PRI[a.priority].w - PRI[b.priority].w;
+  return (f.sort === 'priority' ? (p || d) : (d || p)) || a.createdAt.localeCompare(b.createdAt);
+}
+function visible(T) {
+  const q = f.q.trim().toLowerCase();
+  return tasks.filter(t => {
+    if (f.cat !== 'all' && t.category !== f.cat) return false;
+    if (f.st === 'pending' && t.status !== 'pending') return false;
+    if (f.st === 'completed' && t.status !== 'completed') return false;
+    if (f.st === 'late' && !(t.status === 'pending' && t.deadline < T)) return false;
+    if (q && ![t.title, t.description, t.subject].some(x => x.toLowerCase().includes(q))) return false;
+    return true;
+  }).sort(cmp);
+}
+function badge(text, cls) { return el('span', 'rounded-full px-2 py-0.5 ' + cls, text); }
+function card(t, T) {
+  const done = t.status === 'completed', d = diffDays(t.deadline, T);
+  const c = el('article', 'card flex gap-3 ' + (done ? 'opacity-75' : ''));
+  const chk = el('button', 'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-xs ' +
+    (done ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 hover:border-emerald-500'), done ? '✓' : '');
+  chk.setAttribute('aria-label', done ? 'Buka kembali tugas' : 'Tandai selesai');
+  chk.onclick = () => toggle(t.id);
+  const body = el('div', 'min-w-0 flex-1');
+  body.append(el('h3', 'break-words font-semibold ' + (done ? 'text-slate-500 line-through' : ''), t.title));
+  const meta = el('div', 'mt-1.5 flex flex-wrap gap-1.5 text-xs');
+  const dl = done ? 'bg-emerald-50 text-emerald-700' : d < 0 ? 'bg-red-50 text-red-700' : d === 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
+  meta.append(
+    badge(`${label(t, T)} · ${fmtShort(t.deadline)}`, dl + ' font-medium'),
+    badge(t.category === 'school' ? 'Sekolah' : 'Pribadi', 'bg-slate-100 text-slate-600'),
+    badge('Prioritas ' + PRI[t.priority].t.toLowerCase(), PRI[t.priority].c)
+  );
+  if (t.subject) meta.append(badge(t.subject, 'bg-slate-100 text-slate-600'));
+  body.append(meta);
+  if (t.description) body.append(el('p', 'mt-2 whitespace-pre-line break-words text-sm text-slate-600', t.description));
+  const acts = el('div', 'mt-2 flex gap-3 text-sm');
+  const ed = el('button', 'text-emerald-700 hover:underline', 'Edit'); ed.onclick = () => openForm(t);
+  const del = el('button', 'text-red-600 hover:underline', 'Hapus'); del.onclick = () => askDelete(t);
+  acts.append(ed, del); body.append(acts);
+  c.append(chk, body);
+  return c;
+}
+function chips(box, arr, key) {
+  box.replaceChildren(...arr.map(([v, l]) => {
+    const b = el('button', 'chip ' + (f[key] === v ? 'chip-on' : ''), l);
+    b.onclick = () => { f[key] = v; render(); };
+    return b;
+  }));
+}
+function emptyState(msg, withBtn) {
+  const w = el('div', 'card py-10 text-center');
+  w.append(el('p', 'text-3xl', '📝'), el('p', 'mt-2 font-medium', msg));
+  if (withBtn) { const b = el('button', 'btn btn-p mt-4', '+ Tambah tugas'); b.onclick = () => openForm(); w.append(b); }
+  return w;
+}
+function render() {
+  const T = todayStr(); lastToday = T;
+  $('tgl').textContent = fmtLong(T);
+  const pend = tasks.filter(t => t.status === 'pending');
+  $('s-pend').textContent = pend.length;
+  $('s-today').textContent = pend.filter(t => t.deadline === T).length;
+  $('s-tom').textContent = pend.filter(t => diffDays(t.deadline, T) === 1).length;
+  $('s-done').textContent = tasks.length - pend.length;
+  const sc = $('sch-card'); sc.replaceChildren(); sc.classList.toggle('hidden', !schedule.length);
+  if (schedule.length) {
+    const { day, items } = tomorrowInfo(T);
+    sc.append(el('p', 'text-xs text-slate-500', `Jadwal besok (${DAYS[day]})`));
+    if (!items.length) sc.append(el('p', 'mt-1 text-sm text-slate-600', 'Tidak ada jadwal pelajaran.'));
+    else { const w = el('div', 'mt-2 flex flex-wrap gap-1.5'); items.forEach(e => w.append(badge(e.subject, 'bg-emerald-50 text-xs text-emerald-700'))); sc.append(w); }
+  }
+  chips($('ch-cat'), CATS, 'cat'); chips($('ch-st'), STS, 'st');
+  const items = visible(T), box = $('list');
+  box.replaceChildren();
+  if (!tasks.length) box.append(emptyState('Belum ada tugas. Tambahkan tugas pertamamu!', true));
+  else if (!items.length) box.append(emptyState('Tidak ada tugas yang cocok dengan filter atau pencarian.'));
+  else items.forEach(t => box.append(card(t, T)));
+}
+
+/* ===== Jadwal & mata pelajaran (tanpa jam, diisi sendiri) ===== */
+const SCH_KEY = 'taskmate.schedule.v1';
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Senin sampai Minggu
+const schKey = e => e.day + '|' + e.subject.toLowerCase();
+function normalizeSch(o) {
+  if (!o || typeof o !== 'object' || o.day === null || o.day === '') return null;
+  const subject = String(o.subject ?? '').trim().slice(0, 60), day = Number(o.day);
+  if (!subject || !Number.isInteger(day) || day < 0 || day > 6) return null;
+  return { id: typeof o.id === 'string' && o.id ? o.id.slice(0, 64) : uid(), day, subject }; // jam dari data lama dibuang
+}
+// Gabungkan jadwal tanpa duplikat (hari + nama pelajaran yang sama)
+function mergeSch(base, extra) {
+  const keys = new Set(base.map(schKey)), ids = new Set(base.map(e => e.id)), out = [...base];
+  extra.forEach(e => {
+    if (keys.has(schKey(e))) return;
+    if (ids.has(e.id)) e.id = uid();
+    keys.add(schKey(e)); ids.add(e.id); out.push(e);
+  });
+  return out;
+}
+function loadSch() {
+  if (!storageOk) return;
+  try { const a = JSON.parse(localStorage.getItem(SCH_KEY) || '[]'); schedule = Array.isArray(a) ? mergeSch([], a.map(normalizeSch).filter(Boolean)) : []; }
+  catch (e) { schedule = []; }
+}
+function saveSch() {
+  if (!storageOk) return;
+  try { localStorage.setItem(SCH_KEY, JSON.stringify(schedule)); } catch (e) { toast('Gagal menyimpan jadwal.', true); }
+}
+function subjectList(extra) {
+  return [...new Set([...schedule.map(s => s.subject), ...tasks.map(t => t.subject), extra].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+}
+// Dropdown pelajaran di form tugas; kolom teks muncul jika memilih "Lainnya…"
+function fillSubject(sel, input, value, placeholder) {
+  sel.replaceChildren(new Option(placeholder, ''), ...subjectList(value).map(s => new Option(s, s)), new Option('Lainnya…', '__other'));
+  sel.value = value || ''; input.value = ''; input.classList.add('hidden');
+  sel.onchange = () => { const o = sel.value === '__other'; input.classList.toggle('hidden', !o); if (o) input.focus(); updateHint(); };
+  input.oninput = updateHint;
+}
+const readSubject = (sel, input) => (sel.value === '__other' ? input.value : sel.value).trim();
+function tomorrowInfo(T) {
+  const day = new Date((dayNum(T) + 1) * 864e5).getUTCDay();
+  return { day, items: schedule.filter(e => e.day === day) };
+}
+// Saran deadline: tanggal pertemuan berikutnya untuk pelajaran yang dipilih
+function updateHint() {
+  const box = $('f-hint'); box.replaceChildren();
+  const subj = readSubject($('f-subsel'), $('f-sub')).toLowerCase();
+  if (!subj) return;
+  const days = new Set(schedule.filter(e => e.subject.toLowerCase() === subj).map(e => e.day));
+  if (!days.size) return;
+  const base = dayNum(todayStr());
+  for (let i = 1; i <= 7; i++) {
+    const dt = new Date((base + i) * 864e5), wd = dt.getUTCDay();
+    if (!days.has(wd)) continue;
+    const date = dt.toISOString().slice(0, 10);
+    const b = el('button', 'chip', `Pertemuan berikutnya: ${DAYS[wd]}, ${fmtShort(date)}`);
+    b.type = 'button'; b.onclick = () => { $('f-date').value = date; };
+    box.append(b); return;
+  }
+}
+function renderSch() {
+  const box = $('sch-days'); box.replaceChildren();
+  DAY_ORDER.forEach(d => {
+    const sec = el('div', 'border-b border-slate-100 py-3');
+    sec.append(el('p', 'text-sm font-semibold text-emerald-700', DAYS[d]));
+    const tags = el('div', 'mt-2 flex flex-wrap gap-1.5'), items = schedule.filter(e => e.day === d);
+    if (!items.length) tags.append(el('span', 'text-xs text-slate-400', 'Belum ada pelajaran'));
+    items.forEach(e => {
+      const tag = el('span', 'inline-flex items-center gap-1 rounded-full bg-emerald-50 py-0.5 pl-3 pr-1 text-sm text-emerald-800', e.subject);
+      const x = el('button', 'grid h-5 w-5 place-items-center rounded-full text-xs hover:bg-emerald-100', '✕');
+      x.type = 'button'; x.setAttribute('aria-label', `Hapus ${e.subject} dari ${DAYS[d]}`);
+      x.onclick = () => { schedule = schedule.filter(s => s.id !== e.id); saveSch(); renderSch(); render(); toast('Pelajaran dihapus dari jadwal'); };
+      tag.append(x); tags.append(tag);
+    });
+    const form = el('form', 'mt-2 flex gap-2'); form.noValidate = true;
+    const inp = el('input', 'inp'); inp.maxLength = 60; inp.placeholder = 'Ketik nama pelajaran'; inp.setAttribute('aria-label', 'Pelajaran hari ' + DAYS[d]);
+    const add = el('button', 'btn btn-p shrink-0', 'Tambah'); add.type = 'submit';
+    form.onsubmit = ev => {
+      ev.preventDefault();
+      const subject = inp.value.trim().slice(0, 60);
+      if (!subject) return toast('Ketik nama pelajaran dulu.', true);
+      if (schedule.some(e => e.day === d && e.subject.toLowerCase() === subject.toLowerCase())) return toast(`${subject} sudah ada di hari ${DAYS[d]}.`, true);
+      schedule.push({ id: uid(), day: d, subject }); saveSch(); renderSch(); render(); toast('Pelajaran ditambahkan');
+      const nx = $('sch-days').querySelectorAll('input')[DAY_ORDER.indexOf(d)]; if (nx) nx.focus();
+    };
+    form.append(inp, add); sec.append(tags, form); box.append(sec);
+  });
+}
+function openSch() { renderSch(); open('m-sch'); }
+
+/* ===== CRUD ===== */
+function openForm(t) {
+  editId = t ? t.id : null;
+  $('f-head').textContent = t ? 'Edit tugas' : 'Tambah tugas';
+  $('f-title').value = t ? t.title : '';
+  $('f-cat').value = t ? t.category : 'school';
+  $('f-pri').value = t ? t.priority : 'sedang';
+  fillSubject($('f-subsel'), $('f-sub'), t ? t.subject : '', '— Tanpa mata pelajaran —');
+  $('f-date').value = t ? t.deadline : todayStr();
+  updateHint();
+  $('f-desc').value = t ? t.description : '';
+  $('f-err').textContent = '';
+  open('m-form'); $('f-title').focus();
+}
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const data = {
+    title: $('f-title').value.trim(), category: $('f-cat').value, subject: readSubject($('f-subsel'), $('f-sub')).slice(0, 60),
+    description: $('f-desc').value.trim(), deadline: $('f-date').value, priority: $('f-pri').value
+  };
+  const err = m => { $('f-err').textContent = m; };
+  if (!data.title) return err('Judul tugas wajib diisi.');
+  if (!validDate(data.deadline)) return err('Tanggal deadline wajib diisi dengan tanggal yang valid.');
+  if (editId) {
+    const t = tasks.find(x => x.id === editId);
+    if (!t) return err('Tugas tidak ditemukan.');
+    Object.assign(t, data); toast('Tugas berhasil diperbarui');
+  } else {
+    tasks.push({ id: uid(), ...data, status: 'pending', createdAt: new Date().toISOString() });
+    toast('Tugas berhasil ditambahkan');
+  }
+  save(); close('m-form'); render();
+};
+function toggle(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  t.status = t.status === 'completed' ? 'pending' : 'completed';
+  save(); render();
+  toast(t.status === 'completed' ? 'Tugas ditandai selesai' : 'Tugas dibuka kembali');
+}
+function askDelete(t) {
+  dialog('Hapus tugas?', `"${t.title}" akan dihapus permanen.`, [{ label: 'Hapus', cls: 'btn-d', fn: () => {
+    tasks = tasks.filter(x => x.id !== t.id); save(); render(); toast('Tugas dihapus');
+  } }]);
+}
+
+/* ===== Ringkasan WhatsApp ===== */
+function openWA() {
+  waTasks = tasks.filter(t => t.category === 'school' && t.status === 'pending')
+    .sort((a, b) => a.deadline.localeCompare(b.deadline) || PRI[a.priority].w - PRI[b.priority].w);
+  waSel = new Set(waTasks.map(t => t.id));
+  $('wa-sch').checked = true; renderWA(); open('m-wa');
+}
+function buildText(T) {
+  const sel = waTasks.filter(t => waSel.has(t.id));
+  const inc = $('wa-sch').checked && schedule.length > 0;
+  if (!sel.length && !inc) return '';
+  const grp = d => d < 0 ? '⚠️ Terlambat' : d === 0 ? '🔥 Hari ini' : d === 1 ? '⏰ Besok' : '🗓️ Mendatang';
+  const lines = ['📚 RINGKASAN TUGAS SEKOLAH', '📅 ' + fmtLong(T), ''];
+  let last = '', n = 0;
+  sel.forEach(t => {
+    const g = grp(diffDays(t.deadline, T));
+    if (g !== last) { lines.push('*' + g + '*'); last = g; }
+    n++;
+    lines.push(`${n}. ${t.subject ? t.subject + ' — ' : ''}${t.title}`, `   Deadline: ${label(t, T)}`, '');
+  });
+  if (inc) {
+    const { day, items } = tomorrowInfo(T);
+    lines.push(`🗓️ *JADWAL BESOK (${DAYS[day]})*`);
+    if (items.length) items.forEach(e => lines.push(`• ${e.subject}`)); else lines.push('Tidak ada jadwal pelajaran.');
+    lines.push('');
+  }
+  lines.push(sel.length ? 'Jangan lupa mengerjakan tugasnya! 💪' : 'Semangat belajar! 💪');
+  return lines.join('\n');
+}
+function updatePreview() {
+  waText = buildText(todayStr());
+  $('wa-prev').textContent = waText || 'Pilih minimal satu tugas untuk melihat pratinjau.';
+  $('wa-copy').disabled = $('wa-open').disabled = !waText;
+}
+function renderWA() {
+  const T = todayStr(), box = $('wa-list'); box.replaceChildren();
+  if (!waTasks.length) box.append(el('p', 'py-3 text-sm text-slate-500', 'Belum ada tugas sekolah yang belum selesai.'));
+  waTasks.forEach(t => {
+    const row = el('label', 'flex cursor-pointer items-start gap-2 py-1.5 text-sm');
+    const cb = el('input', 'mt-1 accent-emerald-600'); cb.type = 'checkbox'; cb.checked = waSel.has(t.id);
+    cb.onchange = () => { cb.checked ? waSel.add(t.id) : waSel.delete(t.id); updatePreview(); };
+    row.append(cb, el('span', 'break-words', `${t.subject ? t.subject + ' — ' : ''}${t.title} (${label(t, T)})`));
+    box.append(row);
+  });
+  updatePreview();
+}
+async function copyText(s) {
+  try { await navigator.clipboard.writeText(s); return true; } catch (e) { /* lanjut ke fallback */ }
+  try {
+    const ta = el('textarea'); ta.value = s; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.append(ta); ta.select();
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch (e) { return false; }
+}
+$('wa-copy').onclick = async () => {
+  if (!waText) return;
+  (await copyText(waText)) ? toast('Ringkasan disalin') : toast('Gagal menyalin. Salin manual dari pratinjau.', true);
+};
+$('wa-open').onclick = () => {
+  if (!waText) return;
+  const w = window.open('https://wa.me/?text=' + encodeURIComponent(waText), '_blank', 'noopener');
+  w ? toast('WhatsApp dibuka. Pilih grup dan kirim sendiri.') : toast('Pop-up diblokir. Izinkan pop-up atau gunakan Salin Ringkasan.', true);
+};
+
+/* ===== Ekspor & impor ===== */
+function exportData() {
+  const blob = new Blob([JSON.stringify({ app: 'TaskMate', version: 2, exportedAt: new Date().toISOString(), tasks, schedule }, null, 2)], { type: 'application/json' });
+  const a = el('a'); a.href = URL.createObjectURL(blob); a.download = `taskmate-cadangan-${todayStr()}.json`;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Cadangan diunduh');
+}
+function importFile(file) {
+  if (!file) return;
+  if (file.size > 2e6) return toast('File terlalu besar (maksimal 2 MB).', true);
+  const r = new FileReader();
+  r.onerror = () => toast('File tidak bisa dibaca.', true);
+  r.onload = () => {
+    let data;
+    try { data = JSON.parse(r.result); } catch (e) { return toast('File bukan JSON yang valid.', true); }
+    const arr = Array.isArray(data) ? data : (data && Array.isArray(data.tasks) ? data.tasks : null);
+    if (!arr) return toast('Struktur data tidak dikenali.', true);
+    const ok = arr.map(normalize).filter(Boolean), seen = new Set();
+    ok.forEach(t => { if (seen.has(t.id)) t.id = uid(); seen.add(t.id); });
+    const sch = mergeSch([], (data && Array.isArray(data.schedule) ? data.schedule : []).map(normalizeSch).filter(Boolean));
+    if (!ok.length && !sch.length) return toast('Tidak ada tugas atau jadwal valid di file ini.', true);
+    const skip = arr.length - ok.length;
+    const done = m => { save(); render(); toast(m); };
+    dialog('Impor tugas', `Ditemukan ${ok.length} tugas${sch.length ? ' dan ' + sch.length + ' jadwal' : ''} valid${skip ? ` (${skip} dilewati karena tidak valid)` : ''}. Gabungkan dengan data sekarang, atau ganti seluruh data lama?`, [
+      { label: 'Gabungkan', cls: 'btn-p', fn: () => {
+        const ids = new Set(tasks.map(t => t.id)), add = ok.filter(t => !ids.has(t.id));
+        tasks.push(...add);
+        const before = schedule.length; schedule = mergeSch(schedule, sch); saveSch();
+        done(`${add.length} tugas dan ${schedule.length - before} jadwal ditambahkan`);
+      } },
+      { label: 'Ganti semua', cls: 'btn-d', fn: () => { tasks = ok; if (sch.length) { schedule = sch; saveSch(); } done(`Data diganti dengan ${ok.length} tugas`); } }
+    ]);
+  };
+  r.readAsText(file);
+}
+
+/* ===== Event & inisialisasi ===== */
+$('b-add').onclick = () => openForm();
+$('b-wa').onclick = openWA;
+$('b-sch').onclick = openSch;
+$('wa-sch').onchange = updatePreview;
+$('b-exp').onclick = exportData;
+$('b-imp').onclick = () => $('file').click();
+$('file').onchange = e => { const fl = e.target.files[0]; e.target.value = ''; importFile(fl); };
+$('q').oninput = e => { f.q = e.target.value; render(); };
+$('sort').onchange = e => { f.sort = e.target.value; render(); };
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => close(b.dataset.close));
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('mousedown', e => { if (e.target === m) m.classList.add('hidden'); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden')); });
+// Perbarui label saat tanggal berganti dan halaman masih terbuka
+setInterval(() => { if (todayStr() !== lastToday) render(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && todayStr() !== lastToday) render(); });
+
+load(); loadSch(); renderNotice(); render();
+</script>
+</body>
+</html>
