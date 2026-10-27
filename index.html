@@ -69,6 +69,7 @@
 
   <footer class="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500">
     <span class="mr-auto">Data tersimpan di browser ini. Buat cadangan secara berkala.</span>
+    <label class="flex w-full cursor-pointer items-start gap-2 text-sm text-slate-600"><input id="set-auto" type="checkbox" class="mt-1 accent-emerald-600"><span>Selesai otomatis: tugas sekolah dianggap selesai saat hari deadline tiba</span></label>
     <button id="b-exp" class="btn btn-g !py-1.5">Ekspor JSON</button>
     <button id="b-imp" class="btn btn-g !py-1.5">Impor JSON</button>
     <button id="b-inst" class="btn btn-p !py-1.5">Instal Aplikasi</button>
@@ -193,6 +194,8 @@ function normalize(o) {
     deadline: o.deadline,
     priority: PRI[o.priority] ? o.priority : 'sedang',
     status: o.status === 'completed' ? 'completed' : 'pending',
+    autoDone: o.status === 'completed' && o.autoDone === true,
+    noAuto: o.noAuto === true,
     createdAt: typeof o.createdAt === 'string' && !isNaN(Date.parse(o.createdAt)) ? o.createdAt : new Date().toISOString()
   };
 }
@@ -242,6 +245,31 @@ function dialog(title, msg, actions) {
   open('m-dlg');
 }
 
+/* ===== Pengaturan & selesai otomatis ===== */
+const SET_KEY = 'taskmate.settings.v1';
+const settings = { autoDone: true };
+const dateOf = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+function loadSettings() {
+  if (!storageOk) return;
+  try { const o = JSON.parse(localStorage.getItem(SET_KEY) || '{}'); if (o && typeof o.autoDone === 'boolean') settings.autoDone = o.autoDone; } catch (e) { /* pakai default */ }
+}
+function saveSettings() {
+  if (!storageOk) return;
+  try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) { toast('Gagal menyimpan pengaturan.', true); }
+}
+// Tugas sekolah yang deadline-nya hari ini/terlewat dianggap selesai.
+// Dilewati: tugas yang dibuat hari ini, dan tugas yang dibuka kembali secara manual.
+function autoCompleteDue(T) {
+  if (!settings.autoDone) return 0;
+  let n = 0;
+  tasks.forEach(t => {
+    if (t.category === 'school' && t.status === 'pending' && !t.noAuto && t.deadline <= T && dateOf(t.createdAt) < T) {
+      t.status = 'completed'; t.autoDone = true; n++;
+    }
+  });
+  return n;
+}
+
 /* ===== Render ===== */
 function cmp(a, b) {
   const s = (a.status === 'completed') - (b.status === 'completed');
@@ -278,6 +306,7 @@ function card(t, T) {
     badge('Prioritas ' + PRI[t.priority].t.toLowerCase(), PRI[t.priority].c)
   );
   if (t.subject) meta.append(badge(t.subject, 'bg-slate-100 text-slate-600'));
+  if (t.autoDone) meta.append(badge('Selesai otomatis', 'bg-slate-100 text-slate-500'));
   body.append(meta);
   if (t.description) body.append(el('p', 'mt-2 whitespace-pre-line break-words text-sm text-slate-600', t.description));
   const acts = el('div', 'mt-2 flex gap-3 text-sm');
@@ -302,6 +331,8 @@ function emptyState(msg, withBtn) {
 }
 function render() {
   const T = todayStr(); lastToday = T;
+  const auto = autoCompleteDue(T);
+  if (auto) { save(); setTimeout(() => toast(`${auto} tugas sekolah selesai otomatis`), 0); }
   $('tgl').textContent = fmtLong(T);
   const pend = tasks.filter(t => t.status === 'pending');
   $('s-pend').textContent = pend.length;
@@ -440,6 +471,7 @@ $('form').onsubmit = e => {
   if (editId) {
     const t = tasks.find(x => x.id === editId);
     if (!t) return err('Tugas tidak ditemukan.');
+    if (data.deadline !== t.deadline) t.noAuto = false;
     Object.assign(t, data); toast('Tugas berhasil diperbarui');
   } else {
     tasks.push({ id: uid(), ...data, status: 'pending', createdAt: new Date().toISOString() });
@@ -450,6 +482,7 @@ $('form').onsubmit = e => {
 function toggle(id) {
   const t = tasks.find(x => x.id === id); if (!t) return;
   t.status = t.status === 'completed' ? 'pending' : 'completed';
+  t.autoDone = false; t.noAuto = t.status === 'pending';
   save(); render();
   toast(t.status === 'completed' ? 'Tugas ditandai selesai' : 'Tugas dibuka kembali');
 }
@@ -623,8 +656,12 @@ $('b-inst').onclick = async () => {
   dialog('Instal TaskMate', msg, []);
 };
 
+$('set-auto').onchange = e => {
+  settings.autoDone = e.target.checked; saveSettings(); render();
+  toast(settings.autoDone ? 'Selesai otomatis aktif' : 'Selesai otomatis dimatikan');
+};
 setupPWA();
-load(); loadSch(); renderNotice(); render();
+load(); loadSch(); loadSettings(); $('set-auto').checked = settings.autoDone; renderNotice(); render();
 </script>
 </body>
 </html>
